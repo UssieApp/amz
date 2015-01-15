@@ -24,6 +24,9 @@ package sns
 
 // BUG(niemeyer): Message.SNS must be dropped.
 
+// BUG(TommyO): new methods added pertaining to PlatformApplications and
+// PlatformEndpoints follow existing style, not the ideal.
+
 import (
 	"encoding/xml"
 	"errors"
@@ -40,6 +43,72 @@ type SNS struct {
 	aws.Auth
 	aws.Region
 	private byte // Reserve the right of using private data.
+}
+
+type PlatformApp struct {
+	SNS            *SNS   `xml:"-"`
+	Name           string `xml:"-"`
+	Platform       string `xml:"-"`
+	PlatformAppArn string `xml:"CreatePlatformApplicationResult>PlatformApplicationArn"`
+}
+
+// CreatePlatformApp
+//
+// Registers an App on a specific platform and returns a convenience handle
+func (sns *SNS) CreatePlatformApp(name string, platform string) (*PlatformApp, error) {
+	resp := &PlatformApp{}
+	params := makeParams("CreatePlatformApplication")
+	params["Name"] = name
+	params["Platform"] = platform
+	err := sns.query(nil, nil, params, resp)
+	resp.Name = name
+	resp.Platform = platform
+	resp.SNS = sns
+	return resp, err
+}
+
+// SetPlatformApp
+//
+// Generate a convenience handle for an app already registered on a platform
+func (sns *SNS) SetPlatformApp(name string, platform string, arn string) *PlatformApp {
+	return &PlatformApp{
+		SNS:            sns,
+		Name:           name,
+		Platform:       platform,
+		PlatformAppArn: arn,
+	}
+}
+
+const (
+	ADM          string = "ADM"
+	APNS                = "APNS"
+	APNS_SANDBOX        = "APNS_SANDBOX"
+	GCM                 = "GCM"
+)
+
+type PlatformEndpoint struct {
+	PlatformApp    *PlatformApp `xml:"-"`
+	Token          string       `xml:"-"`
+	CustomUserData string       `xml:"-"`
+	Enabled        bool         `xml:"-"`
+	EndpointArn    string       `xml:"CreatePlatformEndpointResult>EndpointArn"`
+}
+
+// CreatePlatformEndpoint
+//
+// Register an endpoint with a specific PlatformApp. This is indepodent, so can be called repeatedly
+func (app *PlatformApp) CreatePlatformEndpoint(token string, userdata string) (*PlatformEndpoint, error) {
+	resp := &PlatformEndpoint{}
+	params := makeParams("CreatePlatformEndpoint")
+	params["Token"] = token
+	params["PlatformApplicationArn"] = app.PlatformAppArn
+	if userdata != "" {
+		params["CustomUserData"] = userdata
+	}
+	err := app.SNS.query(nil, nil, params, resp)
+	resp.Token = token
+	resp.CustomUserData = userdata
+	return resp, err
 }
 
 type Topic struct {
